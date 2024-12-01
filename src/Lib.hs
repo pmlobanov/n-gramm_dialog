@@ -30,14 +30,25 @@ satisfy pr = Parser f where
     f (c:cs) | pr c = Just (cs,c)
     f _ = Nothing
 
+isleftSymbol :: Parser Char Char
+isleftSymbol = satisfy (\c -> (isPunctuation c  || isSymbol c ) && not (c `elem` ".!?:;()" ))
+
+
 wordParser :: Parser Char Char
-wordParser = satisfy (\c -> not (isPunctuation c) && not (isDigit c))
+wordParser = optional isleftSymbol *> satisfy (\c -> not (isPunctuation c) && not (isDigit c)) <* optional isleftSymbol
 
 sentenceDelimiter :: Parser Char Char
 sentenceDelimiter = satisfy (`elem` ".!?:;()")
 
 sentenceParser :: Parser Char String
-sentenceParser = some wordParser <* optional (some (satisfy isDigit)) <* optional ( satisfy isSeparator)
+sentenceParser = some wordParser <* optional (some (satisfy isDigit)) <* optional ( satisfy isSeparator) <* optional isleftSymbol 
 
 parseText :: Parser Char [String]
 parseText = some (sentenceParser <* sentenceDelimiter <* optional ( satisfy isSeparator)) 
+
+getparsedText :: String -> [String]
+getparsedText input = case runParser parseText input of
+    Just (rest, sentences) -> sentences
+    Nothing -> []
+
+-- test text "a b, c d e! b c d? e b c# a ^d. a f; f."
