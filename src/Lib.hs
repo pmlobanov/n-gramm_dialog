@@ -1,4 +1,4 @@
-module Lib (getparsedText, textConvert, trigramsFromLists, generateRandomString, buildMap, dictToString, generateSentences, parseFileToDict) where
+module Lib (getparsedText, textConvert, trigramsFromLists, generateRandomString, buildMap, dictToString, generateSentences, parseFileToDict, startDialogue) where
 
 import Control.Applicative
 import Data.Char
@@ -75,9 +75,6 @@ textConvert (s:ss) = case runParser sentenceParserClean s of
     Just (_, sentences) -> sentences : textConvert ss
     Nothing -> []
 
-getUniqueWords :: String -> [String]
-getUniqueWords text= nub (mconcat (textConvert (getparsedText text))) 
-
 bigrams :: [String] -> [(String, String)]
 bigrams [] = []
 bigrams [x] = [(x," ")]
@@ -86,13 +83,14 @@ bigrams (x:xs) = (x, head xs) : bigrams  xs
 trigrams :: [String] -> [(String, String)]
 trigrams xs  = [(x, y ++ " " ++ z) | (x:y:z:_) <- tails xs]
 
-
 qtrigrams :: [String] -> [(String, String)]
-qtrigrams xs  = [(x ++ " " ++ y, z) | (x:y:z:_) <- tails xs]
-
+qtrigrams [] = []
+qtrigrams [_] = []
+qtrigrams [x, y] = [(x ++ " " ++ y," ")]
+qtrigrams (x1:xs)  = (x1 ++ " " ++ head xs, head (tail xs)) : qtrigrams xs
 
 trigramsFromLists :: [[String]] -> [(String, String)]
-trigramsFromLists xs=  concatMap trigrams (filter (\ys -> length ys >= 3) xs) ++ concatMap qtrigrams (filter (\ys -> length ys >= 3) xs) ++ concatMap bigrams (filter (\ys -> length ys >= 2) xs)
+trigramsFromLists xs=  concatMap trigrams (filter (\ys -> length ys >= 3) xs) ++ concatMap qtrigrams xs ++ concatMap bigrams (filter (\ys -> length ys >= 2) xs)
 
 addPair :: Pair -> Map String [String] -> Map String [String]
 addPair (k, v) m
@@ -101,8 +99,7 @@ addPair (k, v) m
 
 buildMap :: [Pair] -> Map String [String]
 buildMap = foldr addPair Map.empty
-
--- переписать без do нотации    
+  
 randomElement :: [a] -> IO a
 randomElement xs = randomRIO (0, length xs - 1) >>= \idx -> return (xs !! idx)
 
@@ -122,7 +119,7 @@ generateRandomString' _ _ 0 acc = return $ unwords (reverse acc)
 generateRandomString' m key n acc = 
   case m Map.!? key of
     Nothing -> if n == 15 then return $ "Key " ++ key ++ "is not contained in the dictionary"
-                else return $  "Generation result: " ++ unwords (reverse acc) -- ++ show m-- (mconcat acc)
+                else return $  unwords (reverse acc) -- ++ show m-- (mconcat acc)
     
     Just [] -> return $ unwords (reverse acc) -- ++ key
     Just values -> randomElement values  >>= \next -> generateRandomString' m next (n - 1) (next : acc)
@@ -130,15 +127,13 @@ generateRandomString' m key n acc =
 generateSentences :: Map String [String] -> IO ()
 generateSentences dictionary = 
      putStrLn "Enter word or couple of words:">>
-     getLine >>= \input ->
-     generateRandomString dictionary input >>= \result ->
-     putStrLn result
+     getLine >>=
+        \input ->
+            generateRandomString dictionary input >>= \result ->
+                putStrLn $ "Generation result: " ++ result
 
 char :: Char -> Parser Char Char
 char c = satisfy (== c)
-
-string :: String -> Parser Char String
-string = traverse char
 
 spaces :: Parser Char String
 spaces = many (satisfy isSpace)
@@ -162,10 +157,43 @@ parseLine input = case runParser pairParser input of
     _ -> Nothing
 
 parseFileToDict :: FilePath -> IO (Map String [String])
-parseFileToDict path = do
-    contents <- readFile path
-    let linesOfFile = lines contents
-        pairs = mapM parseLine linesOfFile
-    case pairs of
+parseFileToDict path = 
+    readFile path >>= \contents ->
+    case  mapM parseLine (lines contents) of
         Just ps -> return (Map.fromList ps)
         Nothing -> return Map.empty
+
+findword::Map String [String] -> [String] -> Maybe String  
+findword dict words = 
+  case dict Map.!? last words of
+    Nothing -> findword dict (init words) 
+    Just [] -> findword dict (init words) 
+    Just text -> 
+        (if length text >= 2 then
+     return (last words)
+        else
+     findword dict (init words))
+
+   
+
+runDialog:: Map String [String] -> Map String [String] -> String -> Int -> IO()
+runDialog _ _ _ 0 = putStrLn "Conersation ended"
+runDialog ourMap oppMap firstWords n     = 
+    generateRandomString ourMap firstWords >>= \ourResponse ->
+    putStrLn ("Model 1: " ++ ourResponse) >>
+    case findword oppMap (words ourResponse) of
+        Nothing -> putStrLn "Model 2 has nothing to say."
+        Just oppWord->
+            generateRandomString oppMap oppWord >>= \oppResponse ->
+                putStrLn ("Model 2: " ++ oppResponse) >>
+                case  findword ourMap (words oppResponse)  of
+                    Nothing -> putStrLn "Model 1 has nothing to say."
+                    Just ourword -> runDialog ourMap oppMap ourword (n-1)
+
+startDialogue :: Map String [String] -> Map String [String] -> IO ()
+startDialogue dict1 dict2 = do
+    putStrLn "Enter the initial word (or a couple of words):"
+    startWords <- getLine
+    putStrLn "Enter the depth of M messages:"
+    depth <- readLn
+    runDialog dict1 dict2 startWords depth
