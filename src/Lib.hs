@@ -4,7 +4,7 @@ module Lib
 import Control.Applicative
 import Data.Char
 import Data.List 
-import Data.Maybe
+import System.Random (randomRIO)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -58,6 +58,8 @@ getparsedText input = case runParser parseText input of
 
 -- test text "a b, c d e! b c d? e b c# a ^d. a f; f."
 
+-- [["a","b","c","d","e"],["b","c","d"],["e","b","c","a","d"],["a","f"],["f"]]
+
 --todo Написать функцию getnext getnext2, которая берет следующее слово после пробела.
 
 wordParserClean :: Parser Char String
@@ -90,15 +92,6 @@ qtrigrams xs  = [(x ++ " " ++ y, z) | (x:y:z:_) <- tails xs]
 
 trigramsFromLists :: [[String]] -> [(String, String)]
 trigramsFromLists xs=  concatMap trigrams (filter (\ys -> length ys >= 3) xs) ++ concatMap qtrigrams (filter (\ys -> length ys >= 3) xs) ++ concatMap bigrams (filter (\ys -> length ys >= 2) xs)
---createdictionary :: [(String,String)]-> Map.Map String String
---createdictionary (s:ss) =   
-{-
--- Функция для добавления значения в список по ключу в словаре
-addToMap :: (Ord k) => k -> v -> Map.Map k [v] -> Map.Map k [v]
-addToMap key value = Map.insertWith (++) key [value]
-addToMap _ "" = if Map.lookup 
--}
-
 
 addPair :: Pair -> Map String [String] -> Map String [String]
 addPair (k, v) m
@@ -108,16 +101,30 @@ addPair (k, v) m
 buildMap :: [Pair] -> Map String [String]
 buildMap = foldr addPair Map.empty
 
+-- переписать без do нотации    
+randomElement :: [a] -> IO a
+randomElement xs = randomRIO (0, length xs - 1) >>= \idx -> return (xs !! idx)
 
-{-
-addToMap :: (Ord k) => k-> String -> Map.Map k [String] -> Map.Map k [String]
-addToMap key value m
-  | value == "1" =  case Map.lookup key m of
-                      Nothing -> Map.insert key [value] m
-                      Just existingValue -> Map.insertWith (++) key (existingValue ++ ["2"]) m --if existingValue == [""] then Map.insert key [value] m else m
-  | otherwise =  Map.insertWith (++) key [value] m
+-- Функция для генерации случайной строки
+generateRandomString :: Map String [String] -> String -> IO String
+generateRandomString m key = generateRandomString' m key 15 [key]
 
--- Функция для генерации словаря из списка кортежей
-generateDictionary :: (Ord k) => [(k, String )] -> Map.Map k [String ]
-generateDictionary = foldr (uncurry addToMap) Map.empty
--}
+generateRandomString' :: Map String [String] -> String -> Int -> [String] -> IO String
+generateRandomString' _ _ 0 acc = return $ unwords (reverse acc)
+generateRandomString' m key n acc = 
+  case m Map.!? key of
+    Nothing -> if n == 15 then return $ "Ключ " ++ key ++ " не найден в словаре."
+                else return $  "Результат генерации: " ++ unwords (reverse acc) -- ++ show m-- (mconcat acc)
+    
+    Just [] -> return $ unwords (reverse acc) -- ++ key
+    Just values -> randomElement values  >>= \next -> generateRandomString' m next (n - 1) (next : acc)
+
+
+main :: IO ()
+main = 
+  let pairs = [("a","b c"),("b","c d"),("c","d e"),("b","c d"),("e","b c"),("b","c a"),("c","a d"),("a b","c"),("b c","d"),("c d","e"),("b c","d"),("e b","c"),("b c","a"),("c a","d"),("a","b"),("b","c"),("c","d"),("d","e"),("e"," "),("b","c"),("c","d"),("d"," "),("e","b"),("b","c"),("c","a"),("a","d"),("d"," "),("a","f"),("f"," ")]
+      dictionary = buildMap pairs
+  in putStrLn "Введите слово или пару слов:">>
+     getLine >>= \input ->
+     generateRandomString dictionary input >>= \result ->
+     putStrLn result

@@ -36,6 +36,7 @@ library
   build-depends:
       base >=4.7 && <5
     , containers >=0.7
+    , random >=1.1
   default-language: Haskell2010
 
 executable kurs2-exe
@@ -51,6 +52,7 @@ executable kurs2-exe
       base >=4.7 && <5
     , containers >=0.7
     , kurs2
+    , random >=1.1
   default-language: Haskell2010
 
 test-suite kurs2-test
@@ -67,4 +69,5 @@ test-suite kurs2-test
       base >=4.7 && <5
     , containers >=0.7
     , kurs2
+    , random >=1.1
   default-language: Haskell2010
